@@ -26,6 +26,8 @@ String menu[]={"Play","Record","Settings"};
 #define DIG_OUTPIN  14
 #endif
 
+#define ANA_INPIN A0
+
 #define INIT_TRY 5
 #define NAME_LEN 32
 #define PRINT_LEN 60
@@ -54,6 +56,8 @@ int dir_arrayPointer =0;
 String dirName = "/";
 
 File32 *ff;
+#define REC_SAMPLE_RATE 16000
+
 
 void rgetname(){  
   int x = 0;
@@ -174,7 +178,7 @@ void playit(){
 
 void recordit(){
   String sor1="Recordit";
-  lcdprint (sor1,"");
+  lcdprint (sor1,"Press Select");
   while(1){
     int b=btn.get();
     switch (b){
@@ -192,7 +196,9 @@ void recordit(){
       break;
 
       case 8:
-        recordfile();
+
+        searchRecordfile();
+
       break;
   
     }
@@ -232,7 +238,7 @@ void playfile(String fname){
   dir.open(dirName.c_str());
   dir.rewind();
   dataFile.open(&dir,fname.c_str(), O_RDONLY);
-  lcdprint("Playing",fname);
+  lcdprint("Playing",filename);
   while (true) {
 
     if ((b = dataFile.getName(nBuf,20)) == 0)
@@ -256,17 +262,15 @@ void playfile(String fname){
       }
       if (b == 4) {
         dataFile.close();
-        dir.close();
-        
+        dir.close(); 
+        lcdprint("Playit",filename);       
         return;
       }
     }
   }
 }
 
-void recordfile(){
-  
-}
+
 
 void setdata(String dataname){
 
@@ -296,29 +300,32 @@ void zPlayFile(File32 *f) {
         pct = 100 * ss / ds;
         if (pct != pct0) {
           pct0 = pct;
-          if (((pct % 10) % 3) == 1) Serial.print(".");
+          if (pct ==0){
+            lcdprint(filename,String(pct));
+          }
+          //if (((pct % 10) % 3) == 1) Serial.print(".");
           if ((pct % 10) == 0) {
-            Serial.print(pct);
-            Serial.print("%");
+            lcdprint(filename,String(pct)+" %");
+           
           }
         }
         if (btn.get() != 0) {
-          Serial.print(" -break-");
+          lcdprint(filename," -break-");
           break;
         }
       }
       Serial.println();
     }
     else {
-      Serial.println("Invalid file.");
+      lcdprint(filename,"Invalid file.");
     }
   }
   else
-    Serial.println("File not available.");
+    lcdprint(filename ,"File not available.");
 
-  Serial.println("Done.");
+  lcdprint(filename,"Done.");
 
-  Serial.print("Stop play: ");
+  lcdprint(filename,"Stop play: ");
   Serial.println(PCM_stop());
 }
 
@@ -329,6 +336,106 @@ size_t readHandler(uint8_t *b, size_t s) {
 int wavInfo(File32 *f) {
   ff = f;
   return W.processBuffer(readHandler);
+}
+
+void searchRecordfile(){//wavuino0000.wav
+ int number=0;
+dir.open("/RECORDS/"); 
+ 
+  while(file.openNext(&dir,O_RDONLY)){
+       
+    char f_name[20];
+    file.getName(f_name,20);
+    file.close();
+    //Serial.println(f_name);
+    String f1 = f_name;
+    String f2 = f1.substring(10,11);
+    String f3 = f1.substring(9,10);
+    String f4 = f1.substring(8,9);
+    String f5 = f1.substring(7,8);
+    int i1=f2.toInt()+(f3.toInt()*10)+(f4.toInt()*100)+(f5.toInt()*1000);
+    //Serial.print(f2);Serial.print("|");Serial.print(f3);Serial.print("|");Serial.print(f4);Serial.print("|");Serial.print(f5);Serial.println("|");
+    
+    if(i1>number){
+      number = i1;
+    }
+    
+    
+  }
+  dir.close();
+  //Serial. println(number);
+  number = number+1;
+  String strnum;
+  if(number <10){
+    strnum = "000"+String(number);
+  }
+  else if(number<100){
+    strnum = "00"+String(number);
+  }
+  else if(number<1000){
+    strnum = "0"+String(number);
+  }
+  else{
+    strnum = String(number);
+  }
+  recordfilename = "wavuino"+ strnum +".wav";
+  
+  int b;
+
+  lcdprint("Press to record",recordfilename);
+  while (btn.get() == 0);
+  dir.open("/RECORDS/");
+  dir.rewind();
+  dataFile.open(&dir,recordfilename.c_str(), O_RDWR | O_CREAT);
+  
+  
+  Serial.print("Recording file ");
+  Serial.println(recordfilename);
+
+  recFile(&dataFile);
+  dataFile.close();
+  
+}
+
+void recFile(File32 *f) {
+  uint16_t sr = REC_SAMPLE_RATE;
+  uint32_t ds = 0, ss = 0;
+
+  if (f->isWritable()) {
+    W.createBuffer(sr, 1, 8);
+    f->write(W.getBuffer(), WAVHDR_LEN);
+
+    Serial.print("Setup: ");
+    Serial.println(PCM_setupPWM(sr, 0));
+    Serial.print("Start recording: ");
+    Serial.println(PCM_startRec(true));
+
+    while (btn.get() == 0) {
+      f->write(PCM_getRecBuf(), PCM_BUFSIZ);
+      PCM_releaseRecBuf();
+      ss += PCM_BUFSIZ;      
+      if ((++ds % 100) == 0) {
+        Serial.print(".");
+        if (ds >= 4000) {
+          Serial.println("!");
+          ds = 0;
+        }
+      }
+    }
+  }
+  else
+    Serial.println("File not available.");
+  Serial.println("Done.");
+
+  Serial.print("Stop recording: ");
+  Serial.println(PCM_stop());
+  sprintf(sBuf, "%0ld bytes written.", ss);
+  Serial.println(sBuf);
+
+  W.finalizeBuffer(ss);
+  f->seekSet(0);
+  f->write(W.getBuffer(), WAVHDR_LEN);
+  f->truncate(ss + WAVHDR_LEN);
 }
 
 
@@ -364,13 +471,27 @@ void setup() {
     lcdprint("card initialized.","");
   }
 
-  PCM_init(DIG_OUTPIN);
+  PCM_init(DIG_OUTPIN, ANA_INPIN);
 
    if (!dir.open("/")) {
     lcdprint("Error opening root","");
     while(true);
   }
 
+  if (!sd.exists("records")){
+     lcdprint("Records folder","created");
+    if(!sd.mkdir("records")){
+      
+      lcdprint("Cannot create","records folder");
+      while(true);
+    }    
+  }
+  else if (sd.exists("records")){
+      
+            lcdprint("Records OK","");
+    }
+  delay(1000) ; 
+lcdprint ("Menu", menu[menuitem]);
   
   
 }
