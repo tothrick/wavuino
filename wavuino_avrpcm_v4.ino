@@ -64,7 +64,6 @@ void rgetname(){
     
     char f_name[100];
     file.getName(f_name,100);
-    fileIndex=file.dirIndex();
     filename = f_name;
     dirbool=file.isDir();
     if(dirbool){
@@ -155,8 +154,8 @@ void playit(){
       case 8:
          if(!dirbool){
             String path=dirName+filename;
-            lcdprint("Fileindex: ", String(fileIndex));
-            playfile(path.c_str(),fileIndex);
+            lcdprint("Fileindex: "+String(fileIndex)," String(fileIndex)");
+            playfile(path.c_str());
         }
         else{
           dirName=dirName+filename;
@@ -226,18 +225,18 @@ void setit(){
   }
 }
 
-void playfile(String fname, uint16_t index){
-  
-  lcdprint("directory: ",dirName);
+void playfile(String fname){
+  int b;
+  lcdprint("directory: "+ dirName,"");
   
   dir.open(dirName.c_str());
   dir.rewind();
-  dataFile.open(index, O_RDONLY);
-  lcdprint("Playing",fname+ " Index: "+String(index));
+  dataFile.open(&dir,fname.c_str(), O_RDONLY);
+  lcdprint("Playing",fname);
   while (true) {
 
-    if ((index = dataFile.getName(nBuf,20)) == 0)
-      index = dataFile.getSFN(nBuf,20);
+    if ((b = dataFile.getName(nBuf,20)) == 0)
+      b = dataFile.getSFN(nBuf,20);
     
     sprintf(sBuf, "%3d %10ld %s ", dataFile.dirIndex(), dataFile.size(), nBuf);
     Serial.print(sBuf);
